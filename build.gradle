@@ -20,8 +20,9 @@ compileJava {
 }
 
 minecraft {
-    version = "${minecraft_version}-14.23.4.2749"
+    version = "${minecraft_version}-14.23.5.2838"
     runDir = "run"
+    makeObfSourceJar = false
     mappings = "snapshot_20171003"
 
     replace("@VERSION@",project.version)
@@ -73,7 +74,7 @@ dependencies {
     deobfCompile "net.sengir.forestry:forestry_${minecraft_version}:${forestry_version}"
     deobfCompile "binnie:binnie-mods-${minecraft_version}:${binnie_version}"
     compile files("libs/gregtech-${minecraft_version}-${gt_version}.jar")
-    compile files("libs/GregicAdditions-${minecraft_version}-${ga_version}.jar")
+    compile files("libs/Shadows_of_Greg-${minecraft_version}-${ga_version}.jar")
     compile files("libs/BetterQuesting-${bq_version}.jar")
 }
 

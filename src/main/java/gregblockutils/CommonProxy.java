@@ -45,6 +45,4 @@ public class CommonProxy {
         GBRecipeAddition.register();
     }
 
-    public void registerExpansion() {
-    }
 }

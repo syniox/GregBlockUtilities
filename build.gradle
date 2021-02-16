@@ -22,7 +22,6 @@ compileJava {
 minecraft {
     version = "${minecraft_version}-14.23.5.2847"
     runDir = "run"
-    makeObfSourceJar = false
     mappings = "snapshot_20170928"
 
     replace("@VERSION@",project.version)

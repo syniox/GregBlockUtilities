@@ -1,5 +1,6 @@
 package gregblockutils.Machines;
 
+import codechicken.lib.colour.ColourRGBA;
 import codechicken.lib.render.CCRenderState;
 import codechicken.lib.render.pipeline.ColourMultiplier;
 import codechicken.lib.render.pipeline.IVertexOperation;
@@ -18,6 +19,7 @@ import gregtech.api.metatileentity.MetaTileEntityHolder;
 import gregtech.api.recipes.ModHandler;
 import gregtech.api.render.SimpleSidedCubeRenderer;
 import gregtech.api.render.Textures;
+import gregtech.api.unification.material.Materials;
 import gregtech.api.util.GTUtility;
 import net.minecraft.block.BlockLiquid;
 import net.minecraft.block.state.IBlockState;
@@ -25,13 +27,17 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.network.PacketBuffer;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.fluids.*;
+import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.fluids.FluidTank;
+import net.minecraftforge.fluids.FluidUtil;
+import net.minecraftforge.fluids.IFluidBlock;
 import net.minecraftforge.fluids.capability.IFluidHandler;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
@@ -89,26 +95,31 @@ public class SteamPump extends MetaTileEntity {
 
     @SideOnly(Side.CLIENT)
     public Pair<TextureAtlasSprite, Integer> getParticleTexture() {
-        return Pair.of(Textures.STEAM_CASING_BRONZE.getSpriteOnSide(SimpleSidedCubeRenderer.RenderSide.TOP),16777215);
+        int color = ColourRGBA.multiply(
+                GTUtility.convertRGBtoOpaqueRGBA_CL(Materials.Bronze.materialRGB),
+                GTUtility.convertRGBtoOpaqueRGBA_CL(paintingColor)
+        );
+        color = color >>> 8;
+        return Pair.of(Textures.STEAM_CASING_BRONZE.getSpriteOnSide(SimpleSidedCubeRenderer.RenderSide.TOP), color);
     }
 
     @Override
     public void writeInitialSyncData(PacketBuffer buf) {
         super.writeInitialSyncData(buf);
-        buf.writeInt(pumpHeadY);
+        buf.writeVarInt(pumpHeadY);
     }
 
     @Override
     public void receiveInitialSyncData(PacketBuffer buf) {
         super.receiveInitialSyncData(buf);
-        this.pumpHeadY = buf.readInt();
+        this.pumpHeadY = buf.readVarInt();
     }
 
     @Override
     public void receiveCustomData(int dataId, PacketBuffer buf) {
         super.receiveCustomData(dataId, buf);
-        if (dataId == -200) {
-            this.pumpHeadY = buf.readInt();
+        if (dataId == 200) {
+            this.pumpHeadY = buf.readVarInt();
         }
     }
 
@@ -123,7 +134,7 @@ public class SteamPump extends MetaTileEntity {
 
     public FluidTankList createImportFluidHandler() {
         this.steamFluidTank = (new FilteredFluidHandler(this.getSteamCapacity())).setFillPredicate(ModHandler::isSteam);
-        return new FluidTankList(false, new IFluidTank[]{this.steamFluidTank});
+        return new FluidTankList(false, this.steamFluidTank);
     }
 
     @Override
@@ -138,7 +149,7 @@ public class SteamPump extends MetaTileEntity {
 
     @Override
     public <T> T getCapability(Capability<T> capability, EnumFacing side) {
-        return (side == null || side == EnumFacing.DOWN) ? null : super.getCapability(capability, side);
+        return (side == null || side.getAxis() != EnumFacing.Axis.Y) ? super.getCapability(capability, side) : null;
     }
 
     @Override
@@ -171,33 +182,36 @@ public class SteamPump extends MetaTileEntity {
 
     private void updateQueueState() {
         BlockPos selfPos = getPos().down(pumpHeadY);
-        if (!blocksToCheck.isEmpty()) {
-            BlockPos checkPos = this.blocksToCheck.poll();
-            IBlockState blockHere = getWorld().getBlockState(checkPos);
-            boolean shouldCheckNeighbours = isStraightInPumpRange(checkPos);
-            if (blockHere.getBlock() instanceof BlockLiquid ||
-                    blockHere.getBlock() instanceof IFluidBlock) {
-                IFluidHandler fluidHandler = FluidUtil.getFluidHandler(getWorld(), checkPos, null);
-                FluidStack drainStack = fluidHandler.drain(Integer.MAX_VALUE, false);
-                if (drainStack != null && drainStack.amount > 0) {
-                    this.fluidSourceBlocks.add(checkPos);
-                }
-                shouldCheckNeighbours = true;
+        BlockPos checkPos = null;
+        int amountIterated = 0;
+        do {
+            if (checkPos != null) {
+                blocksToCheck.push(checkPos);
+                amountIterated++;
             }
+            checkPos = blocksToCheck.poll();
 
-            if (shouldCheckNeighbours) {
-                for (EnumFacing facing : EnumFacing.VALUES) {
-                    BlockPos offsetPos = checkPos.offset(facing);
-                    if (offsetPos.distanceSq(selfPos) > MAX_PUMP_RANGE * MAX_PUMP_RANGE)
-                        continue; //do not add blocks outside bounds
-                    this.blocksToCheck.add(offsetPos);
+        } while (checkPos != null &&
+                !getWorld().isBlockLoaded(checkPos) &&
+                amountIterated < blocksToCheck.size());
+        if (checkPos != null) {
+            checkFluidBlockAt(selfPos, checkPos);
+        }
+
+        if (fluidSourceBlocks.isEmpty()) {
+            if (getTimer() % 20 == 0) {
+                BlockPos downPos = selfPos.down(1);
+                if (downPos.getY() >= 0) {
+                    IBlockState downBlock = getWorld().getBlockState(downPos);
+                    if (downBlock.getBlock() instanceof BlockLiquid ||
+                            downBlock.getBlock() instanceof IFluidBlock ||
+                            !downBlock.isTopSolid()) {
+                        this.pumpHeadY++;
+                    }
                 }
-            }
 
-        } else if (fluidSourceBlocks.isEmpty()) {
-            if (getTimer() % 20 == 0 && pumpHeadY < 50) {
-                this.pumpHeadY++;
-                writeCustomData(-200, b -> b.writeInt(pumpHeadY));
+                // Always recheck next time
+                writeCustomData(200, b -> b.writeVarInt(pumpHeadY));
                 markDirty();
                 //schedule queue rebuild because we changed our position and no fluid is available
                 this.initializedQueue = false;
@@ -207,6 +221,33 @@ public class SteamPump extends MetaTileEntity {
                 this.initializedQueue = true;
                 //just add ourselves to check list and see how this will go
                 this.blocksToCheck.add(selfPos);
+            }
+        }
+    }
+
+    private void checkFluidBlockAt(BlockPos pumpHeadPos, BlockPos checkPos) {
+        IBlockState blockHere = getWorld().getBlockState(checkPos);
+        boolean shouldCheckNeighbours = isStraightInPumpRange(checkPos);
+
+        if (blockHere.getBlock() instanceof BlockLiquid ||
+                blockHere.getBlock() instanceof IFluidBlock) {
+            IFluidHandler fluidHandler = FluidUtil.getFluidHandler(getWorld(), checkPos, null);
+            FluidStack drainStack = fluidHandler.drain(Integer.MAX_VALUE, false);
+            if (drainStack != null && drainStack.amount > 0) {
+                this.fluidSourceBlocks.add(checkPos);
+            }
+            shouldCheckNeighbours = true;
+        }
+
+        if (shouldCheckNeighbours) {
+            for (EnumFacing facing : EnumFacing.VALUES) {
+                BlockPos offsetPos = checkPos.offset(facing);
+                if (offsetPos.distanceSq(pumpHeadPos) > MAX_PUMP_RANGE * MAX_PUMP_RANGE)
+                    continue; //do not add blocks outside bounds
+                if (!fluidSourceBlocks.contains(offsetPos) &&
+                        !blocksToCheck.contains(offsetPos)) {
+                    this.blocksToCheck.add(offsetPos);
+                }
             }
         }
     }
@@ -223,7 +264,6 @@ public class SteamPump extends MetaTileEntity {
                 exportFluids.fill(drainStack, true);
                 fluidHandler.drain(drainStack.amount, true);
                 this.fluidSourceBlocks.remove(fluidBlockPos);
-                steamFluidTank.drain(STEAM_DRAIN_PER_CYCLE, true);
             }
         }
     }
@@ -249,6 +289,19 @@ public class SteamPump extends MetaTileEntity {
 
     private int getPumpingCycleLength() {
         return PUMP_SPEED_BASE;
+    }
+
+    @Override
+    public NBTTagCompound writeToNBT(NBTTagCompound data) {
+        super.writeToNBT(data);
+        data.setInteger("PumpHeadDepth", pumpHeadY);
+        return data;
+    }
+
+    @Override
+    public void readFromNBT(NBTTagCompound data) {
+        super.readFromNBT(data);
+        this.pumpHeadY = data.getInteger("PumpHeadDepth");
     }
 
     @Override

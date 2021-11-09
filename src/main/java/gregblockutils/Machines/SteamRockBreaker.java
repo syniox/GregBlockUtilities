@@ -21,7 +21,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fluids.FluidTank;
-import net.minecraftforge.fluids.IFluidTank;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import net.minecraftforge.items.IItemHandlerModifiable;
@@ -100,7 +99,7 @@ public class SteamRockBreaker extends MetaTileEntity {
 
     public FluidTankList createImportFluidHandler() {
         this.steamFluidTank = (new FilteredFluidHandler(this.getSteamCapacity())).setFillPredicate(ModHandler::isSteam);
-        return new FluidTankList(false, new IFluidTank[]{this.steamFluidTank});
+        return new FluidTankList(false, this.steamFluidTank);
     }
 
     private boolean checkSides(BlockStaticLiquid liquid) {

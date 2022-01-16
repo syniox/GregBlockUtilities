@@ -69,6 +69,10 @@ repositories {
         name = "tesla"
         url 'https://maven.mcmoddev.com/'
     }
+    maven {
+        name = "CurseForge"
+        url = "https://minecraft.curseforge.com/api/maven/"
+    }
 }
 
 dependencies {

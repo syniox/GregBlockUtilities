@@ -36,7 +36,7 @@ public class SteamRockBreaker extends MetaTileEntity {
 
     public SteamRockBreaker(ResourceLocation metaTileEntityId) {
         super(metaTileEntityId);
-        if(getWorld()!=null&&!getWorld().isRemote()){
+        if(getWorld()!=null&&!getWorld().isRemote){
             checkFluids();
         }
     }
@@ -63,6 +63,7 @@ public class SteamRockBreaker extends MetaTileEntity {
 
     ///Testing
     private final ItemStack getItemOutput(){
+        ItemStack oputput;
         int largestSignal = 0;
         for (EnumFacing face : EnumFacing.VALUES)
             if (getWorld().getRedstonePower(getPos(), face) > largestSignal)
@@ -89,6 +90,7 @@ public class SteamRockBreaker extends MetaTileEntity {
             default:
                 output = new ItemStack(Blocks.COBBLESTONE);
         }
+        return output;
     }
 
     @Override

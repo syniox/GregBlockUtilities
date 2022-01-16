@@ -30,11 +30,25 @@ import org.apache.commons.lang3.tuple.Pair;
 
 public class SteamRockBreaker extends MetaTileEntity {
 
+    private boolean hasValidFluids;
     private FluidTank steamFluidTank;
     private static final int STEAM_DRAIN_PER_CYCLE = 50;
 
     public SteamRockBreaker(ResourceLocation metaTileEntityId) {
         super(metaTileEntityId);
+        if(getWorld()!=null&&!getWorld().isRemote){
+            checkFluids();
+        }
+    }
+
+    private void checkFluids(){
+        hasValidFluids = checkSides(Blocks.LAVA) && checkSides(Blocks.WATER);
+    }
+
+    @Override
+    public void onNeighborChanged(){
+        super.onNeighborChanged();
+        checkFluids();
     }
 
     @Override
@@ -47,38 +61,44 @@ public class SteamRockBreaker extends MetaTileEntity {
         return new ItemStackHandler(1);
     }
 
+    ///Testing
+    private final ItemStack getItemOutput(){
+        ItemStack output;
+        int largestSignal = 0;
+        for (EnumFacing face : EnumFacing.VALUES)
+            if (getWorld().getRedstonePower(getPos(), face) > largestSignal)
+                largestSignal = getWorld().getRedstonePower(getPos(), face);
+        switch (largestSignal) {
+            case 4:
+            case 5:
+            case 6:
+            case 7:
+                output = new ItemStack(Blocks.STONE, 1, 3);
+                break;
+            case 8:
+            case 9:
+            case 10:
+            case 11:
+                output = new ItemStack(Blocks.STONE, 1, 1);
+                break;
+            case 12:
+            case 13:
+            case 14:
+            case 15:
+                output = new ItemStack(Blocks.STONE, 1, 5);
+                break;
+            default:
+                output = new ItemStack(Blocks.COBBLESTONE);
+        }
+        return output;
+    }
+
     @Override
     public void update() {
         super.update();
         if (!getWorld().isRemote) {
-            ItemStack output;
-            int largestSignal = 0;
-            for (EnumFacing face : EnumFacing.VALUES)
-                if (getWorld().getRedstonePower(getPos(), face) > largestSignal)
-                    largestSignal = getWorld().getRedstonePower(getPos(), face);
-            switch (largestSignal) {
-                case 4:
-                case 5:
-                case 6:
-                case 7:
-                    output = new ItemStack(Blocks.STONE, 1, 3);
-                    break;
-                case 8:
-                case 9:
-                case 10:
-                case 11:
-                    output = new ItemStack(Blocks.STONE, 1, 1);
-                    break;
-                case 12:
-                case 13:
-                case 14:
-                case 15:
-                    output = new ItemStack(Blocks.STONE, 1, 5);
-                    break;
-                default:
-                    output = new ItemStack(Blocks.COBBLESTONE);
-            }
-            if (checkSides(Blocks.LAVA) && checkSides(Blocks.WATER) && getTimer() % 32 == 0 && steamFluidTank.getFluidAmount() >= STEAM_DRAIN_PER_CYCLE * 4) {
+            if (hasValidFluids && getTimer() % 32 == 0 && steamFluidTank.getFluidAmount() >= STEAM_DRAIN_PER_CYCLE * 4) {
+                ItemStack output=getItemOutput();
                 exportItems.insertItem(0, output, false);
                 steamFluidTank.drain(STEAM_DRAIN_PER_CYCLE, true);
             }
